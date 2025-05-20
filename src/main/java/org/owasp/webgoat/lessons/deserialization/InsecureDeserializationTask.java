@@ -30,19 +30,18 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
     @PostMapping("/InsecureDeserialization/task")
     @ResponseBody
     public AttackResult completed(@RequestParam String token) throws IOException {
-        String b64token;
-        long before;
-        long after;
+        String b64token = token.replace('-', '+').replace('_', '/');
+        long before, after;
         int delay;
-
-        b64token = token.replace('-', '+').replace('_', '/');
 
         try (WhitelistedObjectInputStream ois = new WhitelistedObjectInputStream(
                 new ByteArrayInputStream(Base64.getDecoder().decode(b64token)))) {
+            
             before = System.currentTimeMillis();
             Object o = ois.readObject();
             after = System.currentTimeMillis();
 
+            // Check if deserialized object is of expected type
             if (!(o instanceof VulnerableTaskHolder)) {
                 if (o instanceof String) {
                     return failed(this).feedback("insecure-deserialization.stringobject").build();
@@ -54,11 +53,15 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
             return failed(this).feedback("insecure-deserialization.invalidversion").build();
         } catch (IllegalArgumentException e) {
             return failed(this).feedback("insecure-deserialization.expired").build();
+        } catch (ClassNotFoundException e) {
+            return failed(this).feedback("insecure-deserialization.classnotfound").output(e.getMessage()).build();
         } catch (Exception e) {
-            return failed(this).feedback("insecure-deserialization.invalidversion").build();
+            return failed(this).feedback("insecure-deserialization.invalidversion").output(e.getMessage()).build();
         }
 
         delay = (int) (after - before);
+
+        // Ensure response delay is within expected time frame
         if (delay > 7000 || delay < 3000) {
             return failed(this).build();
         }
@@ -67,7 +70,7 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
     }
 
     /**
-     * Custom ObjectInputStream that only allows deserialization of whitelisted classes.
+     * Custom ObjectInputStream that restricts deserialization only to VulnerableTaskHolder class
      */
     static class WhitelistedObjectInputStream extends ObjectInputStream {
         public WhitelistedObjectInputStream(ByteArrayInputStream in) throws IOException {
@@ -77,7 +80,6 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
         @Override
         protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
             String className = desc.getName();
-            // Only allow specific class to be deserialized
             if (!"org.dummy.insecure.framework.VulnerableTaskHolder".equals(className)) {
                 throw new InvalidClassException("Unauthorized deserialization attempt: " + className);
             }
@@ -85,4 +87,3 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
         }
     }
 }
-
