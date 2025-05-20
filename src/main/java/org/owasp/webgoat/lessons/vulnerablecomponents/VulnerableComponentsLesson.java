@@ -4,6 +4,7 @@ import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.security.NoTypePermission;
 import org.apache.commons.lang3.StringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -17,40 +18,77 @@ import org.springframework.web.bind.annotation.RestController;
 @AssignmentHints({"vulnerable.hint"})
 public class VulnerableComponentsLesson implements AssignmentEndpoint {
 
-  @PostMapping("/VulnerableComponents/attack1")
-  public @ResponseBody AttackResult completed(@RequestParam String payload) {
-    XStream xstream = new XStream();
-    xstream.setClassLoader(Contact.class.getClassLoader());
-    xstream.alias("contact", ContactImpl.class);
-    xstream.ignoreUnknownElements();
-    Contact contact = null;
-
-    try {
-      if (!StringUtils.isEmpty(payload)) {
-        payload =
-            payload
+    // Utility method to sanitize the payload
+    private String sanitizePayload(String payload) {
+        if (StringUtils.isEmpty(payload)) return null;
+        return payload
                 .replace("+", "")
                 .replace("\r", "")
                 .replace("\n", "")
                 .replace("> ", ">")
                 .replace(" <", "<");
-      }
-      contact = (Contact) xstream.fromXML(payload);
-    } catch (Exception ex) {
-      return failed(this).feedback("vulnerable-components.close").output(ex.getMessage()).build();
     }
 
-    try {
-      if (null != contact) {
-        contact.getFirstName(); // trigger the example like
-        // https://x-stream.github.io/CVE-2013-7285.html
-      }
-      if (!(contact instanceof ContactImpl)) {
-        return success(this).feedback("vulnerable-components.success").build();
-      }
-    } catch (Exception e) {
-      return success(this).feedback("vulnerable-components.success").output(e.getMessage()).build();
+    @PostMapping("/VulnerableComponents/attack1")
+    public @ResponseBody AttackResult completed(@RequestParam String payload) {
+        // Initialize and configure XStream securely
+        XStream xstream = new XStream();
+        xstream.addPermission(NoTypePermission.NONE); // Remove all permissions
+        xstream.allowTypes(new Class[]{ContactImpl.class}); // Allow only ContactImpl
+        xstream.setClassLoader(Contact.class.getClassLoader());
+        xstream.alias("contact", ContactImpl.class);
+        xstream.ignoreUnknownElements();
+        xstream.setMode(XStream.NO_REFERENCES); // Optional: Disable references
+
+        Contact contact = null;
+
+        // Sanitize the input
+        payload = sanitizePayload(payload);
+        if (StringUtils.isEmpty(payload)) {
+            return failed(this)
+                    .feedback("vulnerable-components.invalid-payload")
+                    .build();
+        }
+
+        try {
+            // Attempt safe deserialization
+            Object obj = xstream.fromXML(payload);
+
+            // Verify object type
+            if (obj instanceof Contact) {
+                contact = (Contact) obj;
+            } else {
+                return failed(this)
+                        .feedback("vulnerable-components.invalid-type")
+                        .build();
+            }
+
+        } catch (Exception ex) {
+            return failed(this)
+                    .feedback("vulnerable-components.close")
+                    .output("Deserialization failed: " + ex.getMessage())
+                    .build();
+        }
+
+        // Attempt to use the deserialized object
+        try {
+            if (contact != null) {
+                contact.getFirstName(); // Simulated logic use
+            }
+            // Validate that the object is the correct implementation
+            if (!(contact instanceof ContactImpl)) {
+                return success(this).feedback("vulnerable-components.success").build();
+            }
+        } catch (Exception e) {
+            return success(this)
+                    .feedback("vulnerable-components.success")
+                    .output(e.getMessage())
+                    .build();
+        }
+
+        return failed(this)
+                .feedback("vulnerable-components.fromXML")
+                .feedbackArgs(contact)
+                .build();
     }
-    return failed(this).feedback("vulnerable-components.fromXML").feedbackArgs(contact).build();
-  }
 }
