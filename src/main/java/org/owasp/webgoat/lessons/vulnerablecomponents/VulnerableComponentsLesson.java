@@ -46,7 +46,36 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
                 .replace(" <", "<");
       }
       // Safely deserialize, restricted to allowed types only
-      contact = (Contact) xstream.fromXML(payload);
+      try {
+    if (!StringUtils.isEmpty(payload)) {
+        payload =
+            payload
+                .replace("+", "")
+                .replace("\r", "")
+                .replace("\n", "")
+                .replace("> ", ">")
+                .replace(" <", "<");
+    }
+    // Try to deserialize only if payload is not empty
+    if (!StringUtils.isEmpty(payload)) {
+        Object obj = xstream.fromXML(payload);
+
+        if (obj instanceof Contact) {
+            contact = (Contact) obj;
+        } else {
+            // Not a Contact object, handle appropriately
+            return failed(this)
+                .feedback("vulnerable-components.invalid-type")
+                .build();
+        }
+    }
+} catch (Exception ex) {
+    return failed(this)
+        .feedback("vulnerable-components.close")
+        .output(ex.getMessage())
+        .build();
+}
+
     } catch (Exception ex) {
       return failed(this)
           .feedback("vulnerable-components.close")
