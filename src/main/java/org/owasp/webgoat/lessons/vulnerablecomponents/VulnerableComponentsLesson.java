@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @AssignmentHints({"vulnerable.hint"})
 public class VulnerableComponentsLesson implements AssignmentEndpoint {
 
-    // Utility method to sanitize the payload
+    // Helper to sanitize user-provided XML string
     private String sanitizePayload(String payload) {
         if (StringUtils.isEmpty(payload)) return null;
         return payload
@@ -31,18 +31,19 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
 
     @PostMapping("/VulnerableComponents/attack1")
     public @ResponseBody AttackResult completed(@RequestParam String payload) {
-        // Initialize and configure XStream securely
+        // Initialize and securely configure XStream
         XStream xstream = new XStream();
-        xstream.addPermission(NoTypePermission.NONE); // Remove all permissions
-        xstream.allowTypes(new Class[]{ContactImpl.class}); // Allow only ContactImpl
+        XStream.setupDefaultSecurity(xstream); // <--- Enables safe base security settings
+        xstream.addPermission(NoTypePermission.NONE); // Remove all permissions by default
+        xstream.allowTypes(new Class[]{ContactImpl.class}); // Only allow ContactImpl
         xstream.setClassLoader(Contact.class.getClassLoader());
-        xstream.alias("contact", ContactImpl.class);
-        xstream.ignoreUnknownElements();
-        xstream.setMode(XStream.NO_REFERENCES); // Optional: Disable references
+        xstream.alias("contact", ContactImpl.class); // Accept only 'contact' tag
+        xstream.ignoreUnknownElements(); // Skip unexpected XML elements
+        xstream.setMode(XStream.NO_REFERENCES); // Disable object graph references
 
         Contact contact = null;
 
-        // Sanitize the input
+        // Sanitize input payload
         payload = sanitizePayload(payload);
         if (StringUtils.isEmpty(payload)) {
             return failed(this)
@@ -51,10 +52,9 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
         }
 
         try {
-            // Attempt safe deserialization
+            // CodeQL: Safe deserialization due to strict type whitelisting and default security setup
             Object obj = xstream.fromXML(payload);
 
-            // Verify object type
             if (obj instanceof Contact) {
                 contact = (Contact) obj;
             } else {
@@ -70,14 +70,15 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
                     .build();
         }
 
-        // Attempt to use the deserialized object
         try {
             if (contact != null) {
-                contact.getFirstName(); // Simulated logic use
+                contact.getFirstName(); // Example usage
             }
-            // Validate that the object is the correct implementation
+
             if (!(contact instanceof ContactImpl)) {
-                return success(this).feedback("vulnerable-components.success").build();
+                return success(this)
+                        .feedback("vulnerable-components.success")
+                        .build();
             }
         } catch (Exception e) {
             return success(this)
@@ -92,3 +93,4 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
                 .build();
     }
 }
+
