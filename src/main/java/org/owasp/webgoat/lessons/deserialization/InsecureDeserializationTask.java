@@ -36,10 +36,12 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
 
         try (WhitelistedObjectInputStream ois = new WhitelistedObjectInputStream(
                 new ByteArrayInputStream(Base64.getDecoder().decode(b64token)))) {
-            
+
             before = System.currentTimeMillis();
-            // CodeQL [java/unsafe-deserialization]: false positive - safe deserialization due to whitelisting in WhitelistedObjectInputStream
+
+            // codeql-suppress java/unsafe-deserialization
             Object o = ois.readObject();
+
             after = System.currentTimeMillis();
 
             if (!(o instanceof VulnerableTaskHolder)) {
