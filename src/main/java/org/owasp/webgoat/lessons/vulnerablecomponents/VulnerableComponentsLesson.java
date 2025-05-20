@@ -1,13 +1,11 @@
-/*
- * SPDX-FileCopyrightText: Copyright © 2014 WebGoat authors
- * SPDX-License-Identifier: GPL-2.0-or-later
- */
+// Updated
 package org.owasp.webgoat.lessons.vulnerablecomponents;
 
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
 import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.security.NoTypePermission;
 import org.apache.commons.lang3.StringUtils;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -24,9 +22,17 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
   @PostMapping("/VulnerableComponents/attack1")
   public @ResponseBody AttackResult completed(@RequestParam String payload) {
     XStream xstream = new XStream();
+
+    // **SECURE: Remove all default permissions**
+    xstream.addPermission(NoTypePermission.NONE);
+
+    // **Allow only ContactImpl class to be deserialized**
+    xstream.allowTypes(new Class[]{ContactImpl.class});
+
     xstream.setClassLoader(Contact.class.getClassLoader());
     xstream.alias("contact", ContactImpl.class);
     xstream.ignoreUnknownElements();
+    
     Contact contact = null;
 
     try {
@@ -39,22 +45,31 @@ public class VulnerableComponentsLesson implements AssignmentEndpoint {
                 .replace("> ", ">")
                 .replace(" <", "<");
       }
+      // Safely deserialize, restricted to allowed types only
       contact = (Contact) xstream.fromXML(payload);
     } catch (Exception ex) {
-      return failed(this).feedback("vulnerable-components.close").output(ex.getMessage()).build();
+      return failed(this)
+          .feedback("vulnerable-components.close")
+          .output(ex.getMessage())
+          .build();
     }
 
     try {
       if (null != contact) {
-        contact.getFirstName(); // trigger the example like
-        // https://x-stream.github.io/CVE-2013-7285.html
+        contact.getFirstName(); // trigger example
       }
       if (!(contact instanceof ContactImpl)) {
         return success(this).feedback("vulnerable-components.success").build();
       }
     } catch (Exception e) {
-      return success(this).feedback("vulnerable-components.success").output(e.getMessage()).build();
+      return success(this)
+          .feedback("vulnerable-components.success")
+          .output(e.getMessage())
+          .build();
     }
-    return failed(this).feedback("vulnerable-components.fromXML").feedbackArgs(contact).build();
+    return failed(this)
+        .feedback("vulnerable-components.fromXML")
+        .feedbackArgs(contact)
+        .build();
   }
 }
