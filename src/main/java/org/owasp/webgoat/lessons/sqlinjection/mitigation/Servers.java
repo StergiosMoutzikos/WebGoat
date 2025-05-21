@@ -40,32 +40,39 @@ public class Servers {
     this.dataSource = dataSource;
   }
 
-  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-  @ResponseBody
-  public List<Server> sort(@RequestParam String column) throws Exception {
+ @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+@ResponseBody
+public List<Server> sort(@RequestParam String column) throws Exception {
     List<Server> servers = new ArrayList<>();
 
-    try (var connection = dataSource.getConnection()) {
-      try (var statement =
-          connection.prepareStatement(
-              "select id, hostname, ip, mac, status, description from SERVERS where status <> 'out"
-                  + " of order' order by "
-                  + column)) {
-        try (var rs = statement.executeQuery()) {
-          while (rs.next()) {
-            Server server =
-                new Server(
-                    rs.getString(1),
-                    rs.getString(2),
-                    rs.getString(3),
-                    rs.getString(4),
-                    rs.getString(5),
-                    rs.getString(6));
-            servers.add(server);
-          }
-        }
-      }
+    // Whitelist επιτρεπτών στηλών
+    List<String> validColumns = List.of("id", "hostname", "ip", "mac", "status", "description");
+    
+    // Αν η παράμετρος δεν είναι στη whitelist, βάζουμε default
+    if (!validColumns.contains(column)) {
+        column = "id"; // default ταξινόμηση
     }
+
+    String query = "SELECT id, hostname, ip, mac, status, description FROM SERVERS " +
+                   "WHERE status <> 'out of order' ORDER BY " + column;
+
+    try (var connection = dataSource.getConnection()) {
+        try (var statement = connection.prepareStatement(query)) {
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    Server server = new Server(
+                        rs.getString(1),
+                        rs.getString(2),
+                        rs.getString(3),
+                        rs.getString(4),
+                        rs.getString(5),
+                        rs.getString(6)
+                    );
+                    servers.add(server);
+                }
+            }
+        }
+    }
+
     return servers;
-  }
 }
