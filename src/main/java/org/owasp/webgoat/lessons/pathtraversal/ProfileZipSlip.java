@@ -63,46 +63,44 @@ public class ProfileZipSlip extends ProfileUploadBase {
   }
 
   @SneakyThrows
-  private AttackResult processZipUpload(MultipartFile file, String username) {
+private AttackResult processZipUpload(MultipartFile file, String username) {
     var tmpZipDirectory = Files.createTempDirectory(username);
-    cleanupAndCreateDirectoryForUser(username);
+    var safeExtractDirectory = cleanupAndCreateDirectoryForUser(username).toPath().toAbsolutePath().normalize();
     var currentImage = getProfilePictureAsBase64(username);
 
     try {
-      var uploadedZipFile = tmpZipDirectory.resolve(file.getOriginalFilename());
-      FileCopyUtils.copy(file.getBytes(), uploadedZipFile.toFile());
+        var uploadedZipFile = tmpZipDirectory.resolve(file.getOriginalFilename());
+        FileCopyUtils.copy(file.getBytes(), uploadedZipFile.toFile());
 
-      ZipFile zip = new ZipFile(uploadedZipFile.toFile());
-      Enumeration<? extends ZipEntry> entries = zip.entries();
-      while (entries.hasMoreElements()) {
-        ZipEntry e = entries.nextElement();
-        File f = new File(tmpZipDirectory.toFile(), e.getName());
-        InputStream is = zip.getInputStream(e);
-        Files.copy(is, f.toPath(), StandardCopyOption.REPLACE_EXISTING);
-      }
+        try (ZipFile zip = new ZipFile(uploadedZipFile.toFile())) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
 
-      return isSolved(currentImage, getProfilePictureAsBase64(username));
+                // Προετοιμασία του path προορισμού με εξομάλυνση (normalize)
+                File destinationFile = new File(safeExtractDirectory.toFile(), entry.getName());
+                Path normalizedDestinationPath = destinationFile.toPath().normalize();
+
+                // ΕΛΕΓΧΟΣ: να μην επιτρέπεται εξαγωγή εκτός του επιτρεπόμενου καταλόγου
+                if (!normalizedDestinationPath.startsWith(safeExtractDirectory)) {
+                    log.warn("Blocked Zip Slip attempt: {}", entry.getName());
+                    continue;
+                }
+
+                if (entry.isDirectory()) {
+                    Files.createDirectories(normalizedDestinationPath);
+                } else {
+                    Files.createDirectories(normalizedDestinationPath.getParent());
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        Files.copy(is, normalizedDestinationPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+            }
+        }
+
+        return isSolved(currentImage, getProfilePictureAsBase64(username));
     } catch (IOException e) {
-      return failed(this).output(e.getMessage()).build();
+        return failed(this).output(e.getMessage()).build();
     }
-  }
-
-  private AttackResult isSolved(byte[] currentImage, byte[] newImage) {
-    if (Arrays.equals(currentImage, newImage)) {
-      return failed(this).output("path-traversal-zip-slip.extracted").build();
-    }
-    return success(this).output("path-traversal-zip-slip.extracted").build();
-  }
-
-  @GetMapping("/PathTraversal/zip-slip/")
-  @ResponseBody
-  public ResponseEntity<?> getProfilePicture(@CurrentUsername String username) {
-    return super.getProfilePicture(username);
-  }
-
-  @GetMapping("/PathTraversal/zip-slip/profile-image/{username}")
-  @ResponseBody
-  public ResponseEntity<?> getProfileImage(@PathVariable String username) {
-    return ResponseEntity.notFound().build();
-  }
 }
+
