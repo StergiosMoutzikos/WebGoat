@@ -72,16 +72,19 @@ public class JWTLessonIntegrationTest extends IntegrationTest {
   }
 
   private String getSecretToken(String token) {
-    for (String key : JWTSecretKeyEndpoint.SECRETS) {
-      try {
-        Jwt jwt = Jwts.parser().setSigningKey(TextCodec.BASE64.encode(key)).parse(token);
-      } catch (JwtException e) {
-        continue;
-      }
-      return TextCodec.BASE64.encode(key);
+  for (String key : JWTSecretKeyEndpoint.SECRETS) {
+    try {
+      Jwt jwt = Jwts.parser()
+          .setSigningKey(TextCodec.BASE64.encode(key))
+          .parseClaimsJws(token);  // <--- Εδώ η αλλαγή
+    } catch (JwtException e) {
+      continue;
     }
-    return null;
+    return TextCodec.BASE64.encode(key);
   }
+  return null;
+}
+
 
   private void decodingToken() {
     MatcherAssert.assertThat(
