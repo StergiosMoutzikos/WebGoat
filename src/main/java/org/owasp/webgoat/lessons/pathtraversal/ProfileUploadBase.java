@@ -45,10 +45,26 @@ public class ProfileUploadBase implements AssignmentEndpoint {
       return failed(this).feedback("path-traversal-profile-empty-name").build();
     }
 
+    // Ασφαλής εξαγωγή ονόματος αρχείου (χωρίς path)
+    String safeFileName = FilenameUtils.getName(fullName);
+
+    // Απορρίπτουμε το όνομα αν περιέχει ύποπτους χαρακτήρες
+    if (safeFileName.contains("..") || safeFileName.contains("/") || safeFileName.contains("\\")) {
+      return failed(this).feedback("path-traversal-invalid-file-name").build();
+    }
+
     File uploadDirectory = cleanupAndCreateDirectoryForUser(username);
 
     try {
-      var uploadedFile = new File(uploadDirectory, fullName);
+      File uploadedFile = new File(uploadDirectory, safeFileName);
+
+      // Ελέγχουμε ότι το αρχείο βρίσκεται μέσα στον φάκελο του χρήστη
+      String canonicalUploadDirPath = uploadDirectory.getCanonicalPath();
+      String canonicalFilePath = uploadedFile.getCanonicalPath();
+      if (!canonicalFilePath.startsWith(canonicalUploadDirPath + File.separator)) {
+        return failed(this).feedback("path-traversal-invalid-file-path").build();
+      }
+
       uploadedFile.createNewFile();
       FileCopyUtils.copy(file.getBytes(), uploadedFile);
 
@@ -109,7 +125,7 @@ public class ProfileUploadBase implements AssignmentEndpoint {
           .findFirst()
           .map(
               file -> {
-                try (var inputStream = new FileInputStream(profileDirectoryFiles[0])) {
+                try (var inputStream = new FileInputStream(file)) {
                   return Base64.getEncoder().encode(FileCopyUtils.copyToByteArray(inputStream));
                 } catch (IOException e) {
                   return defaultImage();
@@ -127,3 +143,4 @@ public class ProfileUploadBase implements AssignmentEndpoint {
     return Base64.getEncoder().encode(FileCopyUtils.copyToByteArray(inputStream));
   }
 }
+
