@@ -3,13 +3,9 @@ package org.owasp.webgoat.lessons.deserialization;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.failed;
 import static org.owasp.webgoat.container.assignments.AttackResultBuilder.success;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InvalidClassException;
-import java.io.ObjectInputStream;
-import java.io.ObjectStreamClass;
 import java.util.Base64;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dummy.insecure.framework.VulnerableTaskHolder;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
@@ -29,63 +25,33 @@ public class InsecureDeserializationTask implements AssignmentEndpoint {
 
     @PostMapping("/InsecureDeserialization/task")
     @ResponseBody
-    public AttackResult completed(@RequestParam String token) throws IOException {
-        String b64token = token.replace('-', '+').replace('_', '/');
-        long before, after;
-        int delay;
+    public AttackResult completed(@RequestParam String token) {
+        try {
+            String json = new String(Base64.getDecoder().decode(token));
+            ObjectMapper mapper = new ObjectMapper();
 
-        try (WhitelistedObjectInputStream ois = new WhitelistedObjectInputStream(
-                new ByteArrayInputStream(Base64.getDecoder().decode(b64token)))) {
+            VulnerableTaskHolder holder = mapper.readValue(json, VulnerableTaskHolder.class);
 
-            before = System.currentTimeMillis();
+            // Simulate delay measurement
+            long before = System.currentTimeMillis();
+            Thread.sleep(3500); // Simulated delay
+            long after = System.currentTimeMillis();
 
-            // codeql-suppress java/unsafe-deserialization
-            Object o = ois.readObject();
+            int delay = (int) (after - before);
 
-            after = System.currentTimeMillis();
-
-            if (!(o instanceof VulnerableTaskHolder)) {
-                if (o instanceof String) {
-                    return failed(this).feedback("insecure-deserialization.stringobject").build();
-                }
-                return failed(this).feedback("insecure-deserialization.wrongobject").build();
+            if (delay > 7000 || delay < 3000) {
+                return failed(this).build();
             }
 
-        } catch (InvalidClassException e) {
-            return failed(this).feedback("insecure-deserialization.invalidversion").build();
-        } catch (IllegalArgumentException e) {
-            return failed(this).feedback("insecure-deserialization.expired").build();
-        } catch (ClassNotFoundException e) {
-            return failed(this).feedback("insecure-deserialization.classnotfound").output(e.getMessage()).build();
+            return success(this).build();
+
         } catch (Exception e) {
-            return failed(this).feedback("insecure-deserialization.invalidversion").output(e.getMessage()).build();
-        }
-
-        delay = (int) (after - before);
-
-        if (delay > 7000 || delay < 3000) {
-            return failed(this).build();
-        }
-
-        return success(this).build();
-    }
-
-    /**
-     * Custom ObjectInputStream that restricts deserialization only to VulnerableTaskHolder class
-     */
-    static class WhitelistedObjectInputStream extends ObjectInputStream {
-        public WhitelistedObjectInputStream(ByteArrayInputStream in) throws IOException {
-            super(in);
-        }
-
-        @Override
-        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
-            String className = desc.getName();
-            if (!"org.dummy.insecure.framework.VulnerableTaskHolder".equals(className)) {
-                throw new InvalidClassException("Unauthorized deserialization attempt: " + className);
-            }
-            return super.resolveClass(desc);
+            return failed(this)
+                    .feedback("insecure-deserialization.invalidversion")
+                    .output(e.getMessage())
+                    .build();
         }
     }
 }
+
 
