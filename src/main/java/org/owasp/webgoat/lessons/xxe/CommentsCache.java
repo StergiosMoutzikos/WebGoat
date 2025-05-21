@@ -70,16 +70,26 @@ public class CommentsCache {
     var jc = JAXBContext.newInstance(Comment.class);
     var xif = XMLInputFactory.newInstance();
 
-    // TODO fix me disabled for now.
     if (securityEnabled) {
-      xif.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, ""); // Compliant
-      xif.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, ""); // compliant
+        // Απενεργοποίηση όλων των εξωτερικών οντοτήτων και DTD parsing για πρόληψη XXE
+        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false); // Disable DTDs
+        xif.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, ""); // Disallow external DTDs
+        xif.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, ""); // Disallow external schemas
     }
 
     var xsr = xif.createXMLStreamReader(new StringReader(xml));
 
     var unmarshaller = jc.createUnmarshaller();
+
+    if (securityEnabled) {
+        // Disable external entities also on the unmarshaller level
+        unmarshaller.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        unmarshaller.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    }
+
     return (Comment) unmarshaller.unmarshal(xsr);
+}
+
   }
 
   public void addComment(Comment comment, WebGoatUser user, boolean visibleForAllUsers) {
