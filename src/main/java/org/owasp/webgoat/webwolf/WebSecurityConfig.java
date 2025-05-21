@@ -29,41 +29,35 @@ public class WebSecurityConfig {
   private final UserService userDetailsService;
 
   @Bean
-  public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    return http.authorizeHttpRequests(
-            auth -> {
-              auth.requestMatchers("/css/**", "/webjars/**", "/favicon.ico", "/js/**", "/images/**")
-                  .permitAll();
-              auth.requestMatchers(
-                      HttpMethod.GET,
-                      "/fileupload/**",
-                      "/files/**",
-                      "/landing/**",
-                      "/PasswordReset/**")
-                  .permitAll();
-              auth.requestMatchers(HttpMethod.POST, "/files", "/mail", "/requests").permitAll();
-              auth.anyRequest().authenticated();
-            })
-        .csrf(csrf -> csrf.disable())
-        .formLogin(
-            login ->
-                login
-                    .loginPage("/login")
-                    .failureUrl("/login?error=true")
-                    .defaultSuccessUrl("/home", true)
-                    .usernameParameter("username")
-                    .passwordParameter("password")
-                    .permitAll())
-        .oauth2Login(
-            oidc -> {
-              oidc.defaultSuccessUrl("/home");
-            })
-        .logout(logout -> logout.deleteCookies("WEBWOLFSESSION").invalidateHttpSession(true))
-        .exceptionHandling(
-            handling ->
-                handling.authenticationEntryPoint(new AjaxAuthenticationEntryPoint("/login")))
-        .build();
-  }
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+  return http
+      .authorizeHttpRequests(auth -> {
+          auth.requestMatchers("/css/**", "/webjars/**", "/favicon.ico", "/js/**", "/images/**").permitAll();
+          auth.requestMatchers(HttpMethod.GET, "/fileupload/**", "/files/**", "/landing/**", "/PasswordReset/**").permitAll();
+          auth.requestMatchers(HttpMethod.POST, "/files", "/mail", "/requests").permitAll();
+          auth.anyRequest().authenticated();
+      })
+      // Ενεργοποιούμε ξανά το CSRF και κάνουμε εξαίρεση μόνο για συγκεκριμένα endpoints (αν πραγματικά είναι απαραίτητο)
+      .csrf(csrf -> csrf
+          .ignoringRequestMatchers(
+              // ΜΟΝΟ αν είναι APIs που δεν κινδυνεύουν από CSRF
+              // π.χ., endpoints που δεν χρησιμοποιούν cookies
+              "/mail", "/files", "/requests"
+          )
+      )
+      .formLogin(login -> login
+          .loginPage("/login")
+          .failureUrl("/login?error=true")
+          .defaultSuccessUrl("/home", true)
+          .usernameParameter("username")
+          .passwordParameter("password")
+          .permitAll())
+      .oauth2Login(oidc -> oidc.defaultSuccessUrl("/home"))
+      .logout(logout -> logout.deleteCookies("WEBWOLFSESSION").invalidateHttpSession(true))
+      .exceptionHandling(handling -> handling.authenticationEntryPoint(new AjaxAuthenticationEntryPoint("/login")))
+      .build();
+}
+
 
   @Autowired
   public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
