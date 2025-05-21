@@ -74,8 +74,3 @@ public class SSRFTask2 implements AssignmentEndpoint {
         return failed(this).feedback("ssrf.failure").output(errorMsg).build();
     }
 }
-
-    private AttackResult getFailedResult(String errorMsg) {
-        return failed(this).feedback("ssrf.failure").output(errorMsg).build();
-    }
-}
